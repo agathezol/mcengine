@@ -35,5 +35,5 @@ mv Makefile.t Makefile
 mv gitignore.t .gitignore
 rm *.t
 git add $FN.[ch]
-git delete skeleton.[ch]
+git rm skeleton.[ch]
 echo "done"
