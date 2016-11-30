@@ -44,3 +44,11 @@ git add $FN.[ch]
 git commit -a -m "renamed package to $FN"
 git status
 echo "done"
+echo
+echo "To create the remote repository you should use:"
+echo
+echo "    mkdir /var/git/$FN.git && cd /var/git/$FN.git && git init --bare"
+echo 
+echo "in the remote repository server you cloned skeleton from. Once complete"
+echo "you may use: git push origin master"
+echo
