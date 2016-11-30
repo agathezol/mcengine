@@ -23,9 +23,12 @@ echo -n "Fixing up Makefile..."
 sed s/skeleton/$FN/g Makefile > Makefile.t
 echo "done"
 
-
 echo -n "Fixing up gitignore..."
 sed s/skeleton/$FN/g .gitignore > gitignore.t
+echo "done"
+
+echo -n "Fixing up git config"
+sed s/skeleton/$FN/g .git/config > config.t 
 echo "done"
 
 echo -n "Cleaning up..."
@@ -33,8 +36,11 @@ mv c.3.t $FN.c
 mv h.3.t $FN.h
 mv Makefile.t Makefile
 mv gitignore.t .gitignore
+mv config.t .git/config
+
 rm *.t
 git rm skeleton.[ch]
 git add $FN.[ch]
 git commit -a -m "renamed package to $FN"
+git status
 echo "done"
