@@ -1,4 +1,8 @@
 #!/bin/bash
+#
+# Renames the skeleton files and changes all file references
+# so the program should build.
+#
 
 FN="$1"
 UP="${FN^^}"
@@ -30,4 +34,6 @@ mv h.3.t $FN.h
 mv Makefile.t Makefile
 mv gitignore.t .gitignore
 rm *.t
+git add $FN.[ch]
+git delete skeleton.[ch]
 echo "done"
