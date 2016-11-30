@@ -34,6 +34,6 @@ mv h.3.t $FN.h
 mv Makefile.t Makefile
 mv gitignore.t .gitignore
 rm *.t
-git add $FN.[ch]
 git rm skeleton.[ch]
+git add $FN.[ch]
 echo "done"
