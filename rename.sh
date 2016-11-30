@@ -36,4 +36,5 @@ mv gitignore.t .gitignore
 rm *.t
 git rm skeleton.[ch]
 git add $FN.[ch]
+git commit -a -m "renamed package to $FN"
 echo "done"
