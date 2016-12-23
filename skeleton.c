@@ -286,6 +286,8 @@ int main( int argc, char *argv[] )
 		}
 	}
 
+	LOG("Goodbye!");
+
 	teardown();
 
 	if( restart ) 
