@@ -10,7 +10,7 @@ LIBS=
 DIRS= ../libaga
 DIRLIBS= ../libaga/agalog.o 
 
-CFLAGS= -g -Wunused -Wno-pragmas -Dbuildtime="\"${buildtime}\"" -D_GNU_SOURCE ${INCLUDE}
+CFLAGS= -Wall -g -Wunused -Wno-pragmas -Dbuildtime="\"${buildtime}\"" -D_GNU_SOURCE ${INCLUDE}
 LDFLAGS= -Wl,--no-as-needed ${LIBS}
 
 OBJS=

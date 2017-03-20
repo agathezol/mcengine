@@ -8,6 +8,7 @@
 #include <sys/prctl.h>
 #include <sys/ptrace.h>
 #include <sys/types.h>
+#include <sys/file.h>
 #include <fcntl.h>
 #include <time.h>
 #include <signal.h>
@@ -23,10 +24,11 @@
 char			slash					= '/';
 int				running 				= 0;
 int				debug					= 0;
-char			base_path[PATH_MAX]		= {0};
-char			programname[PATH_MAX]	= {0};
+char			basePath[PATH_MAX]		= {0};
+char			programName[PATH_MAX]	= {0};
+char			configPath[PATH_MAX]	= {0};
 char			hostname[PATH_MAX]		= "localhost";
-char			lockfilepath[PATH_MAX]	= {0};
+char			lockfilePath[PATH_MAX]	= {0};
 int				takeSnapshots			= 0;
 int				hexDumpEnabled			= 0;
 int				foreground				= 0;
@@ -94,15 +96,15 @@ int lockProgram()
 {
 	int retVal = 0;
 
-	lockFD = open( lockfilepath, O_CREAT | O_RDWR, S_IRUSR |S_IWUSR );
+	lockFD = open( lockfilePath, O_CREAT | O_RDWR, S_IRUSR |S_IWUSR );
 	if( lockFD < 0 )
 	{
-		errLOG( "ERROR: opening lock file %s: %s", lockfilepath, strerror(errno));
+		errLOG( "ERROR: opening lock file %s: %s", lockfilePath, strerror(errno));
 		retVal = myErrno;
 	}
 	else if( flock( lockFD, LOCK_EX | LOCK_NB ) )
 	{
-		errLOG( "ERROR: locking lock file %s: %s", lockfilepath, strerror(errno));
+		errLOG( "ERROR: locking lock file %s: %s", lockfilePath, strerror(errno));
 		retVal = myErrno;
 	}
 
@@ -115,9 +117,54 @@ int unlockProgram()
 	{
 		flock(lockFD, LOCK_UN);
 		close(lockFD);
-		unlink(lockfilepath);
+		unlink(lockfilePath);
 	}
+	return 0;
 }
+
+/******************************************************************************
+ * parse config
+ *****************************************************************************/
+int parseConfig( )
+{
+    int retVal = 0;
+    char line[BUFSZ];
+    FILE *fp = NULL;
+    char *p;
+    int tint;
+	int lineNum = 0;
+
+    if( (fp = fopen( configPath, "r" )) )
+    {
+        memset( line, 0, BUFSZ );
+        while( !retVal && fgets( line, BUFSZ, fp ) )
+        {
+			lineNum++;
+
+            /* normalize line */
+            if( (p = strchr( line, '#' ) ) ) *p = 0;
+            if( strlen(line) )
+            {
+                for( p = &line[strlen(line)]; p >= line && *p <= ' '; p-- )
+                    *p = 0;
+            }
+
+            /* if we still have a line, parse it */
+            if( strlen(line) )
+            {
+                if( sscanf( line, "debug = %d", &tint ) == 1 ) 
+					debug = tint;
+				else {
+					LOG( "WARNING: invalid config entry at line %d: %s", lineNum, line );
+					retVal = -1;
+				}
+			}
+		}
+	}
+
+	return retVal;
+}
+
 
 int setup( int argc, char *argv[] )
 {
@@ -128,22 +175,22 @@ int setup( int argc, char *argv[] )
 	time_t t = time(NULL);
 	struct tm *lt = localtime(&t);
 
-	strncpy(base_path, argv[0], PATH_MAX);
-	for( lim = &base_path[strlen(base_path)-1];
-			(lim >= base_path) && (*lim != slash); lim-- ) *lim = 0;
+	strncpy(basePath, argv[0], PATH_MAX);
+	for( lim = &basePath[strlen(basePath)-1];
+			(lim >= basePath) && (*lim != slash); lim-- ) *lim = 0;
 
-	if( !strlen(base_path) )
-		base_path[0] = '.';
+	if( !strlen(basePath) )
+		basePath[0] = '.';
 
-	strncpy(programname, argv[0], PATH_MAX);
-	for( lim = &programname[strlen(programname)-1];
-			(lim >= programname) && (*lim != slash); lim-- );
+	strncpy(programName, argv[0], PATH_MAX);
+	for( lim = &programName[strlen(programName)-1];
+			(lim >= programName) && (*lim != slash); lim-- );
 	if( *lim == slash )
 	{
 		lim++;
 		strcpy(tp, lim);
-		memset(programname, 0, 256);
-		strcpy(programname, tp);
+		memset(programName, 0, 256);
+		strcpy(programName, tp);
 	}
 
 	for( i = 1; i < argc; i++ )
@@ -172,7 +219,7 @@ int setup( int argc, char *argv[] )
 					"   All Rights Reserved\n"
 					"Build Time: %s\n"
 					"Version: %s\n",
-					programname,
+					programName,
 					lt->tm_year + 1900,
 					buildtime,
 					SKELETON_VERSION
@@ -185,13 +232,13 @@ int setup( int argc, char *argv[] )
 		}
 	}
 
-	openlog( programname, LOG_NDELAY | LOG_NOWAIT | LOG_PID, LOG_LOCAL1 );
+	openlog( programName, LOG_NDELAY | LOG_NOWAIT | LOG_PID, LOG_LOCAL1 );
 	dbLOG( "boj\n" );
 
-	sprintf(lockfilepath, "/dev/shm/%s.lck", programname );
+	sprintf(lockfilePath, "/dev/shm/%s.lck", programName );
 	if( lockProgram() )
 	{
-		errLOG( "%s is already running, aborting", programname );
+		errLOG( "%s is already running, aborting", programName );
 		retVal = -1;
 	}
 	else
@@ -214,6 +261,9 @@ int setup( int argc, char *argv[] )
 
 		/* obtain our local ip address */
 		gethostname(hostname, PATH_MAX);
+
+		/* build our config file path */
+		sprintf(configPath, "%s/%s.cfg", basePath, programName );
 
 		if( !foreground )
 		{
@@ -278,6 +328,8 @@ int main( int argc, char *argv[] )
 
 	if( setup( argc, argv ) )
 		retVal = -1; 
+	else if( parseConfig() )
+		retVal = -1;
 	else {
 		running = 1;
 		while( running ) {
@@ -285,8 +337,6 @@ int main( int argc, char *argv[] )
 			             nothing to do */
 		}
 	}
-
-	LOG("Goodbye!");
 
 	teardown();
 
