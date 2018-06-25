@@ -40,6 +40,9 @@ int				minMem					= 1024;
 int 			maxMem					= 2048;
 char			mcJar[PATH_MAX]			= "minecraft_server.jar";
 char			javaArgs[LINE_MAX]		= "";
+char			saveStr[]				= "save-all";
+char			shutdownStr[]			= "stop";
+int				restartAt				= -1;
 struct sigaction sigalarm;
 child_t			minecraft;
 
@@ -136,7 +139,7 @@ int parseConfig( )
     char line[BUFSZ];
     FILE *fp = NULL;
     char *p;
-    int tint;
+    int tint, tint2;
 	int lineNum = 0;
 
     if( (fp = fopen( configPath, "r" )) )
@@ -163,6 +166,9 @@ int parseConfig( )
 				else if( sscanf( line, "maxMem = %d", &maxMem ) == 1);
 				else if( sscanf( line, "serverJar = %s", mcJar ) == 1);
 				else if( sscanf( line, "javaArgs = \"%[a-zA-Z.0-9'-_$%^&*()!@]\"", javaArgs ) == 1);
+				else if( sscanf( line, "restartAt = %d:%d", &tint, &tint2 ) == 2 ) {
+					restartAt = tint * 60 + tint2;
+				}
 				else {
 					LOG( "WARNING: invalid config entry at line %d: %s", lineNum, line );
 					retVal = -1;
@@ -439,6 +445,22 @@ int process()
 int housekeeping()
 {
 	int retVal = 0;
+	time_t now;
+	struct tm *lt;
+	int nowHM = 0;
+	static int lastRestartDay = 0;
+
+	if( restartAt >= 0 ) {
+		time(&now);
+		lt = localtime(&now);
+		nowHM = lt->tm_hour * 60 + lt->tm_min;
+		if( nowHM < restartAt && lt->tm_yday != lastRestartDay ) {
+			lastRestartDay = lt->tm_yday;
+			dpwrite( &minecraft, saveStr, strlen(saveStr) );
+			sleep(1);
+			dpwrite( &minecraft, shutdownStr, strlen(saveStr) );
+		}
+	}
 
 	return retVal;
 }
