@@ -178,21 +178,18 @@ int kill_child( child_t * child, int sig )
 {
   int ret = 0;
 
-  if( child->pid > 0 )
-    {
-      if( kill( child->pid, sig ) )
-        {
-          ret = -errno;
-        }
-      else
-        {
-          if( child->fd_out )
-            close( child->fd_out );
-          if( child->fd_in )
-            close( child->fd_in );
-          child->pid = 0;
-        }
-    }
+  if( child->pid > 0 ) {
+	  if( kill( child->pid, sig ) ) {
+		  ret = -errno;
+	  }
+	  else if( sig ) {
+		  if( child->fd_out )
+			  close( child->fd_out );
+		  if( child->fd_in )
+			  close( child->fd_in );
+		  child->pid = 0;
+	  }
+  }
 
   return ret;
 }

@@ -47,6 +47,26 @@ struct sigaction sigalarm;
 child_t			minecraft;
 char			logPath[PATH_MAX];
 FILE			*logFD					= NULL;
+int				logsToKeep				= 30;
+int				lastLogDay				= 0;
+int lastRestartDay = 0;
+time_t			now;
+struct tm		*nowTm;
+char			nowString[32];
+time_t			lastStartTime = 0;
+
+int getNow()
+{
+	int retVal = 0;
+	char *p;
+
+	time(&now);
+	nowTm = localtime(&now);
+	strcpy( nowString, ctime(&now) );
+	for( p = &nowString[strlen(nowString)-1]; *p <= ' '; p-- ) *p = 0;
+
+	return retVal;
+}
 
 void sig_handler( int sig )
 {
@@ -188,6 +208,7 @@ int parseConfig( )
 						retVal = -1;
 					}
 				}
+				else if( sscanf(line, "logsToKeep = %d", &logsToKeep) == 1 );
 				else {
 					printf( "WARNING: invalid config entry at line %d: %s\n", lineNum, line );
 				}
@@ -365,6 +386,15 @@ int initMinecraft()
 	char *ps[64];
 	char *p, *s;
 	int argCount = 0;
+	int result;
+
+	getNow();
+	result = now - lastStartTime;
+	if( result < 60 ) { 
+		printf("mcengine: waiting to restart minecraft for %d seconds\n",
+				result);
+		sleep(result);
+	}
 
 	memset( &minecraft, 0, sizeof(minecraft) );
 	strcpy( minecraft.name, "minecraft" );
@@ -391,7 +421,13 @@ int initMinecraft()
 	}
 	ps[argCount] = NULL;
 
-	retVal = (dppopenv( &minecraft, ps ) < 0);
+	time(&lastStartTime);
+	retVal = dppopenv( &minecraft, ps );
+	if( retVal > 0 ) {
+		if( logFD )
+			fprintf(logFD, "mcengine: server launched with pid %d\n", retVal);
+		retVal = 0;
+	} 
 
 	return retVal;
 }
@@ -402,10 +438,17 @@ int handleSTInput()
 	char line[LINE_MAX];
 	int sz;
 
+	memset(line, 0, LINE_MAX);
 	if( fgets(line, LINE_MAX, stdin) ) {
 		sz = strlen(line);
 		if( sz > 0 ) {
-			retVal = (dpwrite( &minecraft, line, sz ) != sz);
+			if( dpwrite( &minecraft, line, sz ) != sz ) {
+				if( logFD ) {
+					fprintf(logFD, "mcengine: error writing to server: %s\n", strerror(errno));
+				}
+				errLOG( "ERROR: could not write to minecraft server: %s", strerror(errno));
+				retVal = -1;
+			}
 		}
 	}
 	 else 
@@ -420,6 +463,7 @@ int handleMCInput()
 	char line[LINE_MAX];
 	int sz;
 
+	memset(line, 0, LINE_MAX);
 	sz = dpread( &minecraft, line, LINE_MAX );
 	if( sz > 0 ) {
 		fputs( line, stdout );
@@ -438,23 +482,25 @@ int process()
     int retVal = 0;
     fd_set readSet;
     struct timeval tv;
+	int result;
     
     FD_ZERO( &readSet );
-    FD_SET ( minecraft.fd_out, &readSet );
+    FD_SET ( minecraft.fd_in, &readSet );
     FD_SET ( fileno(stdin), &readSet );
     tv.tv_sec = 60;
     tv.tv_usec = 0;
     
-    retVal = select( FD_SETSIZE, &readSet, NULL, NULL, &tv );
-    switch( retVal )
+    result = select( FD_SETSIZE, &readSet, NULL, NULL, &tv );
+    switch( result )
     {
         case -1:
             printf( "select error: %s\n", strerror(errno) );
+			retVal = -1;
             break;
         case 0:
             break;
         default:
-            if( FD_ISSET( minecraft.fd_out, &readSet ) )
+            if( FD_ISSET( minecraft.fd_in, &readSet ) )
                 retVal = handleMCInput();
 			if( !retVal && FD_ISSET( fileno(stdin), &readSet ) )
 				retVal = handleSTInput();
@@ -467,21 +513,38 @@ int process()
 int housekeeping()
 {
 	int retVal = 0;
-	time_t now;
-	struct tm *lt;
 	int nowHM = 0;
-	static int lastRestartDay = 0;
+	int lcount = logsToKeep;
+	char tpath[PATH_MAX];
+	char tpath2[PATH_MAX];
+
+	// get times
+	getNow();
 
 	if( restartAt >= 0 ) {
-		time(&now);
-		lt = localtime(&now);
-		nowHM = lt->tm_hour * 60 + lt->tm_min;
-		if( nowHM < restartAt && lt->tm_yday != lastRestartDay ) {
-			lastRestartDay = lt->tm_yday;
+		nowHM = nowTm->tm_hour * 60 + nowTm->tm_min;
+		if( nowHM < restartAt && nowTm->tm_yday != lastRestartDay ) {
+			lastRestartDay = nowTm->tm_yday;
 			dpwrite( &minecraft, saveStr, strlen(saveStr) );
 			sleep(1);
 			dpwrite( &minecraft, shutdownStr, strlen(saveStr) );
 		}
+	}
+
+	// roll and reopen the logs
+	if( nowTm->tm_yday != lastLogDay && logFD && logsToKeep > 1 ) {
+		fclose(logFD);
+		for( lcount = logsToKeep; lcount > 0; lcount-- ) {
+			sprintf(tpath, "%s/%s-%d", basePath, logPath, lcount);
+			if( lcount == 1 )
+				sprintf(tpath2, "%s/%s", basePath, logPath);
+			else
+				sprintf(tpath2, "%s/%s-%d", basePath, logPath, lcount-1);
+			if( access(tpath2, F_OK) == 0 ) {
+				rename(tpath2, tpath);
+			}
+		}
+		logFD = fopen(logPath, "w+");
 	}
 
 	return retVal;
@@ -496,18 +559,22 @@ int main( int argc, char *argv[] )
 		retVal = -1; 
 	else if( parseConfig() )
 		retVal = -1;
+	else if( initMinecraft() )
+		retVal = -1;
 	else {
 		running = 1;
+		getNow();
+		lastRestartDay = nowTm->tm_yday;
+		lastLogDay = nowTm->tm_yday;
+		result = 0;
 		while( running ) {
-			if( initMinecraft() == 0 ) {
-				do { 
-					result = process();
-					housekeeping();
-				} while ( result == 0 );
+			if( result || kill_child(&minecraft, 0) ) {
+				kill_child(&minecraft, SIGTERM);
+				result = initMinecraft();
 			} else {
-				printf("error initing minecraft server\n");
-				sleep(5);
+				result = process();
 			}
+			housekeeping();
 		}
 	}
 
