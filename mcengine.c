@@ -18,8 +18,8 @@
 #include <libaga.h>
 #include <agalog.h>
 
-
 #include "mcengine.h"
+#include "dpfork.h"
 
 char			slash					= '/';
 int				running 				= 0;
@@ -31,12 +31,17 @@ char			hostname[PATH_MAX]		= "localhost";
 char			lockfilePath[PATH_MAX]	= {0};
 int				takeSnapshots			= 0;
 int				hexDumpEnabled			= 0;
-int				foreground				= 0;
+int				foreground				= 1;
 int				alarmRaised				= 0;
 int				termsig					= 0;
 int				restart					= 0;
 int				lockFD					= 0;
+int				minMem					= 1024;
+int 			maxMem					= 2048;
+char			mcJar[PATH_MAX]			= "minecraft_server.jar";
+char			javaArgs[LINE_MAX]		= "";
 struct sigaction sigalarm;
+child_t			minecraft;
 
 void sig_handler( int sig )
 {
@@ -154,6 +159,10 @@ int parseConfig( )
             {
                 if( sscanf( line, "debug = %d", &tint ) == 1 ) 
 					debug = tint;
+				else if( sscanf( line, "minMem = %d", &minMem ) == 1);
+				else if( sscanf( line, "maxMem = %d", &maxMem ) == 1);
+				else if( sscanf( line, "serverJar = %s", mcJar ) == 1);
+				else if( sscanf( line, "javaArgs = \"%[a-zA-Z.0-9'-_$%^&*()!@]\"", javaArgs ) == 1);
 				else {
 					LOG( "WARNING: invalid config entry at line %d: %s", lineNum, line );
 					retVal = -1;
@@ -215,7 +224,7 @@ int setup( int argc, char *argv[] )
 		{
 			fprintf( stdout,
 					"%s - mcengine Program\n"
-					"(c) 2016-%d The Hyde Company\n"
+					"(c) 2016-%d Stirge Gaming\n"
 					"   All Rights Reserved\n"
 					"Build Time: %s\n"
 					"Version: %s\n",
@@ -322,9 +331,122 @@ int teardown()
 	return retVal;
 }
 
+int initMinecraft()
+{
+	int retVal = 0;
+	char *ps[64];
+	char *p, *s;
+	int argCount = 0;
+
+	memset( &minecraft, 0, sizeof(minecraft) );
+	strcpy( minecraft.name, "minecraft" );
+	strcpy( minecraft.path, "java" );
+
+	for( argCount = 0; argCount < 64; argCount++ )
+		ps[argCount] = NULL;
+
+	// setup default arguments
+	ps[0] = "java";
+	ps[1] =  malloc(32);
+	sprintf(ps[1], "-Xmx%dM", maxMem);
+	ps[2] =  malloc(32);
+	sprintf(ps[2], "-Xms%dM", minMem);
+	ps[3] = "-jar";
+	ps[4] = mcJar;
+	ps[5] = "nogui";
+	// parse additional arguments
+	for( p = javaArgs, argCount = 6, s = p; *p && argCount < 62; ) {
+		p++;
+		if( *p == ' ' || *p == 0 ) {
+			*p = 0;
+			while( *p == ' ' ) p++;
+			ps[argCount++] = s;
+			s = p;
+		}
+	}
+	ps[argCount] = NULL;
+
+	retVal = dppopenv( &minecraft, ps );
+
+	return retVal;
+}
+
+int handleSTInput() 
+{
+    int retVal = 0;
+	char line[LINE_MAX];
+	int sz;
+
+	if( fgets(line, LINE_MAX, stdin) ) {
+		sz = strlen(line);
+		if( sz > 0 ) {
+			retVal = (dpwrite( &minecraft, line, sz ) != sz);
+		}
+	}
+	 else 
+		retVal = -1;
+
+	return retVal;
+}
+
+int handleMCInput() 
+{
+    int retVal = 0;
+	char line[LINE_MAX];
+	int sz;
+
+	sz = dpread( &minecraft, line, LINE_MAX );
+	if( sz > 0 ) {
+		fputs( line, stdout );
+		fflush(stdout);
+	} else if( sz < 0 )
+		retVal = -1;
+    
+    return retVal;
+}
+
+int process() 
+{
+    int retVal = 0;
+    fd_set readSet;
+    struct timeval tv;
+    
+    FD_ZERO( &readSet );
+    FD_SET ( minecraft.fd_out, &readSet );
+    FD_SET ( fileno(stdin), &readSet );
+    tv.tv_sec = 60;
+    tv.tv_usec = 0;
+    
+    retVal = select( FD_SETSIZE, &readSet, NULL, NULL, &tv );
+    switch( retVal )
+    {
+        case -1:
+            printf( "select error: %s\n", strerror(errno) );
+            break;
+        case 0:
+            break;
+        default:
+            if( FD_ISSET( minecraft.fd_out, &readSet ) )
+                retVal = handleMCInput();
+			if( !retVal && FD_ISSET( fileno(stdin), &readSet ) )
+				retVal = handleSTInput();
+            break;
+    }
+    
+    return retVal;
+}
+
+int housekeeping()
+{
+	int retVal = 0;
+
+	return retVal;
+}
+
 int main( int argc, char *argv[] )
 {
 	int retVal = 0;
+	int result;
 
 	if( setup( argc, argv ) )
 		retVal = -1; 
@@ -333,8 +455,15 @@ int main( int argc, char *argv[] )
 	else {
 		running = 1;
 		while( running ) {
-			sleep(1); /* this is where we do things, but as we are a mcengine there is
-			             nothing to do */
+			if( initMinecraft() == 0 ) {
+				do { 
+					result = process();
+					housekeeping();
+				} while ( result == 0 );
+			} else {
+				printf("error initing minecraft server\n");
+				sleep(5);
+			}
 		}
 	}
 

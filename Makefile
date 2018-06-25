@@ -3,7 +3,7 @@ buildtime=`date`
 
 CC=gcc
 
-INCLUDE= -I. -I../include -I../bigpipes -I../libaga
+INCLUDE= -I. -I../libaga
 LIBS= 
 
 # External Directories
@@ -13,7 +13,7 @@ DIRLIBS= ../libaga/agalog.o
 CFLAGS= -Wall -g -Wunused -Wno-pragmas -Dbuildtime="\"${buildtime}\"" -D_GNU_SOURCE ${INCLUDE}
 LDFLAGS= -Wl,--no-as-needed ${LIBS}
 
-OBJS=
+OBJS= dpfork.o
 
 TARGETS= mcengine
 
@@ -35,8 +35,9 @@ tags: $(TARGETS)
 ../libaga/agalog.o: forcelook
 	cd ../libaga; $(MAKE) $(MFLAGS)
 
+dpfork.o: dpfork.h
 
 mcengine.o:
 
-mcengine: ../libaga/agalog.o ../libaga/libaga.o
+mcengine: ../libaga/agalog.o ../libaga/libaga.o $(OBJS)
 
