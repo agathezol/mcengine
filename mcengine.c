@@ -19,7 +19,7 @@
 #include <agalog.h>
 
 
-#include "skeleton.h"
+#include "mcengine.h"
 
 char			slash					= '/';
 int				running 				= 0;
@@ -214,7 +214,7 @@ int setup( int argc, char *argv[] )
 		else if( strcmp( argv[i], "-v") == 0 )
 		{
 			fprintf( stdout,
-					"%s - Skeleton Program\n"
+					"%s - mcengine Program\n"
 					"(c) 2016-%d The Hyde Company\n"
 					"   All Rights Reserved\n"
 					"Build Time: %s\n"
@@ -222,7 +222,7 @@ int setup( int argc, char *argv[] )
 					programName,
 					lt->tm_year + 1900,
 					buildtime,
-					SKELETON_VERSION
+					MCENGINE_VERSION
 				   );
 			retVal = 1;
 		}
@@ -333,7 +333,7 @@ int main( int argc, char *argv[] )
 	else {
 		running = 1;
 		while( running ) {
-			sleep(1); /* this is where we do things, but as we are a skeleton there is
+			sleep(1); /* this is where we do things, but as we are a mcengine there is
 			             nothing to do */
 		}
 	}

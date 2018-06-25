@@ -15,7 +15,7 @@ LDFLAGS= -Wl,--no-as-needed ${LIBS}
 
 OBJS=
 
-TARGETS= skeleton
+TARGETS= mcengine
 
 .c.o:
 	$(CC) $(CFLAGS) -c $< -o $*.o
@@ -36,7 +36,7 @@ tags: $(TARGETS)
 	cd ../libaga; $(MAKE) $(MFLAGS)
 
 
-skeleton.o:
+mcengine.o:
 
-skeleton: ../libaga/agalog.o ../libaga/libaga.o
+mcengine: ../libaga/agalog.o ../libaga/libaga.o
 
