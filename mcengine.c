@@ -45,6 +45,8 @@ char			shutdownStr[]			= "stop";
 int				restartAt				= -1;
 struct sigaction sigalarm;
 child_t			minecraft;
+char			logPath[PATH_MAX];
+FILE			*logFD					= NULL;
 
 void sig_handler( int sig )
 {
@@ -138,7 +140,7 @@ int parseConfig( )
     int retVal = 0;
     char line[BUFSZ];
     FILE *fp = NULL;
-    char *p;
+    char *p, *d;
     int tint, tint2;
 	int lineNum = 0;
 
@@ -165,13 +167,29 @@ int parseConfig( )
 				else if( sscanf( line, "minMem = %d", &minMem ) == 1);
 				else if( sscanf( line, "maxMem = %d", &maxMem ) == 1);
 				else if( sscanf( line, "serverJar = %s", mcJar ) == 1);
-				else if( sscanf( line, "javaArgs = \"%[a-zA-Z.0-9'-_$%^&*()!@]\"", javaArgs ) == 1);
+				else if( strncmp( line, "javaArgs = \"", 12 ) == 0 ) {
+					memset(javaArgs, 0, LINE_MAX);
+					for( p = &line[12], d = javaArgs; *p ; ) {
+						if( *p == '"' && *(p-1) != '\\' ) {
+							*p = 0;
+						} else {
+							*(d++) = *(p++);
+						}
+					}
+				}
 				else if( sscanf( line, "restartAt = %d:%d", &tint, &tint2 ) == 2 ) {
 					restartAt = tint * 60 + tint2;
 				}
+				else if( sscanf(line, "logfile = %s", logPath ) == 1 ) {
+					logFD = fopen(logPath, "w+");
+					if( logFD == NULL ) {
+						printf("ERROR: could not open logfile '%s': %s\n", logPath,
+								strerror(errno));
+						retVal = -1;
+					}
+				}
 				else {
-					LOG( "WARNING: invalid config entry at line %d: %s", lineNum, line );
-					retVal = -1;
+					printf( "WARNING: invalid config entry at line %d: %s\n", lineNum, line );
 				}
 			}
 		}
@@ -324,7 +342,6 @@ void snapshot()
 	}
 }
 
-
 /**
  * Teardown()
  *   - called right before restarting the progarm. any socket closes, db resets, etc
@@ -333,6 +350,11 @@ void snapshot()
 int teardown()
 {
 	int retVal = 0;
+
+	if( logFD ) {
+		fclose(logFD);
+		logFD = NULL;
+	}
 
 	return retVal;
 }
@@ -351,17 +373,14 @@ int initMinecraft()
 	for( argCount = 0; argCount < 64; argCount++ )
 		ps[argCount] = NULL;
 
+	argCount = 0;
 	// setup default arguments
-	ps[0] = "java";
-	ps[1] =  malloc(32);
-	sprintf(ps[1], "-Xmx%dM", maxMem);
-	ps[2] =  malloc(32);
-	sprintf(ps[2], "-Xms%dM", minMem);
-	ps[3] = "-jar";
-	ps[4] = mcJar;
-	ps[5] = "nogui";
+	ps[argCount++] = "java";
+	ps[argCount++] = "-jar";
+	ps[argCount++] = mcJar;
+	ps[argCount++] = "nogui";
 	// parse additional arguments
-	for( p = javaArgs, argCount = 6, s = p; *p && argCount < 62; ) {
+	for( p = javaArgs, s = p; *p && argCount < 62; ) {
 		p++;
 		if( *p == ' ' || *p == 0 ) {
 			*p = 0;
@@ -372,7 +391,7 @@ int initMinecraft()
 	}
 	ps[argCount] = NULL;
 
-	retVal = dppopenv( &minecraft, ps );
+	retVal = (dppopenv( &minecraft, ps ) < 0);
 
 	return retVal;
 }
@@ -405,6 +424,9 @@ int handleMCInput()
 	if( sz > 0 ) {
 		fputs( line, stdout );
 		fflush(stdout);
+		if( logFD ) {
+			fputs( line, logFD );
+		}
 	} else if( sz < 0 )
 		retVal = -1;
     
