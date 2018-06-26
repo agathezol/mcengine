@@ -177,9 +177,10 @@ int dpread( child_t * child, void *buff, int sz )
 int kill_child( child_t * child, int sig )
 {
   int ret = 0;
+  int result;
 
   if( child->pid > 0 ) {
-	  if( kill( child->pid, sig ) ) {
+	  if( (result = kill( child->pid, sig )) ) {
 		  ret = -errno;
 	  }
 	  else if( sig ) {
@@ -188,6 +189,8 @@ int kill_child( child_t * child, int sig )
 		  if( child->fd_in )
 			  close( child->fd_in );
 		  child->pid = 0;
+		  child->fd_out = 0;
+		  child->fd_in = 0;
 	  }
   }
 

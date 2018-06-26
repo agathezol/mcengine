@@ -9,6 +9,7 @@
 #include <sys/ptrace.h>
 #include <sys/types.h>
 #include <sys/file.h>
+#include <sys/wait.h>
 #include <fcntl.h>
 #include <time.h>
 #include <signal.h>
@@ -39,6 +40,7 @@ int				lockFD					= 0;
 int				minMem					= 1024;
 int 			maxMem					= 2048;
 char			mcJar[PATH_MAX]			= "minecraft_server.jar";
+char			javaCmd[PATH_MAX]		= "java";
 char			javaArgs[LINE_MAX]		= "";
 char			saveStr[]				= "save-all";
 char			shutdownStr[]			= "stop";
@@ -111,6 +113,11 @@ void sig_handler( int sig )
 			running = 0;
 			restart = 1;
 			termsig = sig;
+			break;
+
+		case SIGCHLD:
+			while( waitpid(-1, NULL, WNOHANG) > 0 )
+				continue;
 			break;
 
 		default:
@@ -209,6 +216,7 @@ int parseConfig( )
 					}
 				}
 				else if( sscanf(line, "logsToKeep = %d", &logsToKeep) == 1 );
+				else if( sscanf(line, "javaCmd = %s", javaCmd) == 1 );
 				else {
 					printf( "WARNING: invalid config entry at line %d: %s\n", lineNum, line );
 				}
@@ -309,6 +317,7 @@ int setup( int argc, char *argv[] )
 		sigaction(SIGTTIN, &sigalarm, NULL);
 		sigaction(SIGTTOU, &sigalarm, NULL);
 		sigaction(SIGIO, &sigalarm, NULL);
+		sigaction(SIGCHLD, &sigalarm, NULL );
 
 		// make setuid dumpable
 		prctl(PR_SET_DUMPABLE, 1, 1, 1, 1);
@@ -398,14 +407,14 @@ int initMinecraft()
 
 	memset( &minecraft, 0, sizeof(minecraft) );
 	strcpy( minecraft.name, "minecraft" );
-	strcpy( minecraft.path, "java" );
+	strcpy( minecraft.path, javaCmd );
 
 	for( argCount = 0; argCount < 64; argCount++ )
 		ps[argCount] = NULL;
 
 	argCount = 0;
 	// setup default arguments
-	ps[argCount++] = "java";
+	ps[argCount++] = javaCmd;
 	ps[argCount++] = "-jar";
 	ps[argCount++] = mcJar;
 	ps[argCount++] = "nogui";
