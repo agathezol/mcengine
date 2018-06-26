@@ -2,3 +2,6 @@ mcengine
 *~
 .*.swp
 *.o
+*/*.o
+*/*.swp
+*/*~

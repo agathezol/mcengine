@@ -3,12 +3,12 @@ buildtime=`date`
 
 CC=gcc
 
-INCLUDE= -I. -I../libaga
+INCLUDE= -I. -Ilibaga
 LIBS= 
 
 # External Directories
-DIRS= ../libaga
-DIRLIBS= ../libaga/agalog.o 
+DIRS= libaga
+DIRLIBS= libaga/agalog.o 
 
 CFLAGS= -Wall -g -Wunused -Wno-pragmas -Dbuildtime="\"${buildtime}\"" -D_GNU_SOURCE ${INCLUDE}
 LDFLAGS= -Wl,--no-as-needed ${LIBS}
@@ -32,12 +32,12 @@ forcelook:
 tags: $(TARGETS)
 	ctags *.h *.c 
 
-../libaga/agalog.o: forcelook
-	cd ../libaga; $(MAKE) $(MFLAGS)
+libaga/agalog.o: forcelook
+	cd libaga; $(MAKE) $(MFLAGS)
 
 dpfork.o: dpfork.h
 
 mcengine.o:
 
-mcengine: ../libaga/agalog.o ../libaga/libaga.o $(OBJS)
+mcengine: libaga/agalog.o libaga/libaga.o $(OBJS)
 
