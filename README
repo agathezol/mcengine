@@ -1,0 +1,23 @@
+
+						Installation Instructions
+
+1)	type "make"
+2)	move 'mcengine' and 'mcengine.cfg' into your minecraft server installation
+3)  edit mcengine.cfg to change "serverJar" to the current jar you run for a server
+4)  change "javaArgs" to your current java server arguments list
+
+
+						   Running Instructions
+
+1)	execute: './mcengine' inside the minecraft server directory
+
+
+						          Notes
+
+The mcengine is designed to keep minecraft running and restart it when it 
+crashes. It has been tested but only in a single test environment. If you
+encounter a bug or issue with the program and want me to resolve it please
+send me a core file of the running program (you can get one with gcore) and
+a copy of your binary so I can get a stack trace from it. Thanks!
+
+
