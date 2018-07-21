@@ -56,6 +56,67 @@ time_t			now;
 struct tm		*nowTm;
 char			nowString[32];
 time_t			lastStartTime = 0;
+SEC_USER_LIST	users;
+
+int parseUserLevel( char *l )
+{
+	int retVal = SEC_MAX;
+
+	if( strcasecmp( l, "normal" ) == 0 )
+		retVal = SEC_NORM;
+	else if( strcasecmp( l, "priv" ) == 0 )
+		retVal = SEC_PRIV;
+	else if( strcasecmp( l, "op" ) == 0 || strcasecmp( l, "admin" ) == 0 ) 
+		retVal = SEC_ADMIN;
+
+	return retVal;
+}
+
+SECURITY_LEVEL getUserSecLevel( char *user ) 
+{
+	SECURITY_LEVEL retVal = SEC_NORM;
+	int i;
+
+	for( i = 0; i < users.count; i++ ) {
+		if( strcasecmp( users.user[i].username, user ) == 0 ) {
+			retVal = users.user[i].sl; 
+			break;
+		}
+	}
+
+	return retVal;
+}
+
+int parseUser( char *v )
+{
+	int retVal = 0;
+	char tuser[32];
+	char tlevel[32];
+	int level;
+	int ix;
+
+	if( v ) {
+		memset(tuser, 0, 32);
+		if( sscanf( v, "%s:%s", tuser, tlevel ) == 2 ) {
+			level = parseUserLevel( tlevel );
+			if( level < SEC_MAX ) {
+				ix = users.count++;
+				users.user = realloc(users.user, users.count * sizeof(SEC_USER) );
+				memset( &users.user[ix], 0, sizeof(SEC_USER) );
+				strcpy( users.user[ix].username, tuser );
+				users.user[ix].sl = level;
+			}
+			else
+				retVal = -1;
+		}
+		else 
+			retVal = -1;
+	}
+	else
+		retVal = -1;
+
+	return retVal;
+}
 
 int getNow()
 {
@@ -170,6 +231,7 @@ int parseConfig( )
     char *p, *d;
     int tint, tint2;
 	int lineNum = 0;
+	char tstr[LINE_MAX];
 
     if( (fp = fopen( configPath, "r" )) )
     {
@@ -217,6 +279,11 @@ int parseConfig( )
 				}
 				else if( sscanf(line, "logsToKeep = %d", &logsToKeep) == 1 );
 				else if( sscanf(line, "javaCmd = %s", javaCmd) == 1 );
+				else if( sscanf(line, "user = %s", tstr ) == 1 ) {
+					if( parseUser( tstr ) ) 
+						printf("ERROR: invalid user format '%s' on line %d\n",
+								tstr, lineNum);
+				}
 				else {
 					printf( "WARNING: invalid config entry at line %d: %s\n", lineNum, line );
 				}
@@ -466,6 +533,17 @@ int handleSTInput()
 	return retVal;
 }
 
+int parseMCInput( char *line )
+{
+	int retVal = 0;
+	char *p, *lim, *s;
+
+	p = line;
+	lim = &line[strlen(line)];
+
+	return retVal;
+}
+
 int handleMCInput() 
 {
     int retVal = 0;
@@ -475,11 +553,15 @@ int handleMCInput()
 	memset(line, 0, LINE_MAX);
 	sz = dpread( &minecraft, line, LINE_MAX );
 	if( sz > 0 ) {
-		fputs( line, stdout );
-		fflush(stdout);
+		if( foreground ) {
+			fputs( line, stdout );
+			fflush(stdout);
+		}
 		if( logFD ) {
 			fputs( line, logFD );
 		}
+		parseMCInput(line); // this does destrutive things to the line var and should
+		                    // remain under any logging being done with the line
 	} else if( sz < 0 )
 		retVal = -1;
     
@@ -579,6 +661,7 @@ int main( int argc, char *argv[] )
 		while( running ) {
 			if( result || kill_child(&minecraft, 0) ) {
 				kill_child(&minecraft, SIGTERM);
+				sleep(5); // wait 5 seconds between kill and restart
 				result = initMinecraft();
 			} else {
 				result = process();
